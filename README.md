@@ -42,6 +42,20 @@ O HTTPS (Let's Encrypt) é ativado automaticamente. Depois troca `O-VOSSO-DOMINI
 - Netlify → o teu site → **Forms** → escolhe o formulário → vês cada submissão.
 - **Export to CSV** (botão no topo da lista) e abre no Excel. As colunas são: `nome`, `presenca`, `num_pessoas`, `alergias`, `observacoes` (RSVP) e `nome`, `mensagem` (mensagens).
 
+## Backoffice (descarregar respostas em Excel)
+
+Em `https://O-TEU-SITE/backoffice/` há uma página protegida por palavra-passe que lista as respostas e descarrega um ficheiro `.xlsx` (uma folha por formulário, **só com as colunas que têm respostas preenchidas**). A página não está ligada no menu e tem `noindex`.
+
+Para funcionar, configura em Netlify → **Site configuration → Environment variables**:
+
+| Variável | O que é |
+|---|---|
+| `BACKOFFICE_PASSWORD` | a palavra-passe que escolheres para entrar no backoffice |
+| `NETLIFY_API_TOKEN` | token pessoal: Netlify → o teu avatar → **User settings → Applications → Personal access tokens → New access token** |
+| `SITE_ID` | normalmente já existe; se der erro, copia o **Project ID** de *Site configuration → General* |
+
+Depois faz um novo deploy (**Deploys → Trigger deploy**). A função que lê as respostas está em `netlify/functions/respostas.js`.
+
 ## Notificações por email
 
 Netlify → **Site configuration → Notifications → Form submission notifications → Add notification → Email notification**. Escolhe o formulário (ou "Any form") e o email. Podes adicionar vários destinatários.

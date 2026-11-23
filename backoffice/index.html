@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backoffice · Inês &amp; Dani</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Cormorant+Garamond:wght@600;700&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .bo { max-width: 960px; margin: 0 auto; padding: 40px 18px 80px; }
+    .bo h2 { font-family: var(--font-hand); color: var(--green-dark); font-size: 2rem; margin: 32px 0 8px; }
+    .bo .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 14px 0 6px; }
+    .bo .tablewrap { overflow-x: auto; border: 1px solid var(--green); border-radius: 10px; background: var(--paper); }
+    .bo table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+    .bo th, .bo td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #e3dccb; vertical-align: top; }
+    .bo th { font-family: var(--font-caps); letter-spacing: .06em; text-transform: uppercase; color: var(--ink); white-space: nowrap; }
+    .bo td { min-width: 90px; }
+    .bo .erro { color: var(--red-dark); min-height: 1.5em; }
+    .bo .muted { opacity: .8; }
+  </style>
+</head>
+<body>
+  <main class="bo">
+    <h1 class="section__title">Backoffice</h1>
+
+    <form id="login" class="form" style="max-width:360px;margin:0 auto">
+      <div class="field">
+        <label for="pw">Palavra-passe</label>
+        <input type="password" id="pw" autocomplete="current-password" required
+               style="width:100%;font:inherit;background:var(--paper);border:2px solid var(--green);border-radius:10px;padding:11px 14px">
+      </div>
+      <button class="btn" type="submit">Entrar</button>
+      <p class="erro" id="erro" role="alert"></p>
+    </form>
+
+    <section id="painel" hidden>
+      <div class="actions">
+        <button class="btn" type="button" id="xlsx">Descarregar Excel</button>
+        <button class="btn btn--ghost" type="button" id="atualizar">Atualizar</button>
+        <button class="btn btn--ghost" type="button" id="sair">Sair</button>
+      </div>
+      <p class="muted" id="resumo"></p>
+      <div id="tabelas"></div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    var ETIQUETAS = {
+      nome: "Nome", presenca: "Presença", num_pessoas: "Nº de pessoas",
+      alergias: "Alergias / restrições", observacoes: "Observações", mensagem: "Mensagem"
+    };
+    var ORDEM = ["nome", "presenca", "num_pessoas", "alergias", "observacoes", "mensagem"];
+    var dados = null;
+
+    var $ = function (id) { return document.getElementById(id); };
+    var data = function (iso) { return new Date(iso).toLocaleString("pt-PT"); };
+
+    // Só mantém as colunas que têm pelo menos uma resposta preenchida.
+    function colunas(linhas) {
+      var usadas = {};
+      linhas.forEach(function (l) { Object.keys(l.campos).forEach(function (k) { usadas[k] = true; }); });
+      var ks = Object.keys(usadas);
+      ks.sort(function (a, b) {
+        var ia = ORDEM.indexOf(a), ib = ORDEM.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+      });
+      return ks;
+    }
+
+    function matriz(linhas) {
+      var cols = colunas(linhas);
+      var cab = ["Data"].concat(cols.map(function (k) { return ETIQUETAS[k] || k; }));
+      var corpo = linhas.map(function (l) {
+        return [data(l.criado)].concat(cols.map(function (k) { return l.campos[k] || ""; }));
+      });
+      return [cab].concat(corpo);
+    }
+
+    function desenhar() {
+      var cont = $("tabelas"); cont.textContent = "";
+      var total = 0;
+      Object.keys(dados).forEach(function (nome) {
+        var linhas = dados[nome]; total += linhas.length;
+        var h = document.createElement("h2"); h.textContent = nome + " (" + linhas.length + ")"; cont.appendChild(h);
+        if (!linhas.length) { var p = document.createElement("p"); p.className = "muted"; p.textContent = "Ainda sem respostas."; cont.appendChild(p); return; }
+        var m = matriz(linhas), wrap = document.createElement("div"), t = document.createElement("table");
+        wrap.className = "tablewrap";
+        m.forEach(function (row, i) {
+          var tr = document.createElement("tr");
+          row.forEach(function (c) { var el = document.createElement(i ? "td" : "th"); el.textContent = c; tr.appendChild(el); });
+          t.appendChild(tr);
+        });
+        wrap.appendChild(t); cont.appendChild(wrap);
+      });
+      $("resumo").textContent = total + " resposta(s) no total.";
+    }
+
+    function carregar() {
+      $("erro").textContent = "";
+      var pw = sessionStorage.getItem("bo_pw") || $("pw").value;
+      return fetch("/.netlify/functions/respostas", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw })
+      }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.erro || "Erro"); return j; });
+      }).then(function (j) {
+        try { sessionStorage.setItem("bo_pw", pw); } catch (e) {}
+        dados = j.formularios;
+        $("login").hidden = true; $("painel").hidden = false; desenhar();
+      }).catch(function (e) {
+        try { sessionStorage.removeItem("bo_pw"); } catch (x) {}
+        $("login").hidden = false; $("painel").hidden = true; $("erro").textContent = e.message;
+      });
+    }
+
+    $("login").addEventListener("submit", function (e) { e.preventDefault(); carregar(); });
+    $("atualizar").addEventListener("click", carregar);
+    $("sair").addEventListener("click", function () {
+      try { sessionStorage.removeItem("bo_pw"); } catch (e) {}
+      location.reload();
+    });
+    $("xlsx").addEventListener("click", function () {
+      var wb = XLSX.utils.book_new();
+      Object.keys(dados).forEach(function (nome) {
+        if (!dados[nome].length) return;
+        var ws = XLSX.utils.aoa_to_sheet(matriz(dados[nome]));
+        var m = matriz(dados[nome]);
+        ws["!cols"] = m[0].map(function (_, c) {
+          var w = Math.max.apply(null, m.map(function (r) { return String(r[c]).length; }));
+          return { wch: Math.min(Math.max(w + 2, 10), 60) };
+        });
+        XLSX.utils.book_append_sheet(wb, ws, nome.slice(0, 31));
+      });
+      if (!wb.SheetNames.length) { alert("Ainda não há respostas para descarregar."); return; }
+      XLSX.writeFile(wb, "respostas-" + new Date().toISOString().slice(0, 10) + ".xlsx");
+    });
+
+    if (sessionStorage.getItem("bo_pw")) carregar();
+  })();
+  </script>
+</body>
+</html>
